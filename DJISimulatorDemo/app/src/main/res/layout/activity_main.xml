@@ -100,6 +100,19 @@
         android:layout_toEndOf="@+id/btn_take_off"
         android:layout_marginLeft="10dp" />
 
+    <Button
+        android:id="@+id/btn_forward"
+        style="@style/common_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/btn_land"
+        android:layout_alignEnd="@+id/btn_land"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="0dp"
+        android:layout_marginBottom="10dp"
+        android:layout_toEndOf="@+id/btn_start_simulator"
+        android:text="Forward" />
+
     <com.dji.simulatorDemo.OnScreenJoystick
         android:id="@+id/directionJoystickLeft"
         android:layout_width="130dp"
@@ -119,6 +132,24 @@
         android:layout_marginBottom="10dp"
         android:layout_marginRight="10dp"
         android:background="@mipmap/joystick_bg"/>
+
+    <EditText
+        android:id="@+id/edittext_bridge_ip"
+        android:layout_width="150dp"
+        android:layout_height="55dp"
+        android:layout_below="@+id/btn_forward"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="67dp"
+        android:digits="0123456789.\n"
+        android:hint="WSBridge IP"
+        android:imeOptions="actionDone"
+        android:inputType="numberDecimal"
+        android:maxLength="15"
+        android:maxLines="1"
+        android:nextFocusLeft="@id/edittext_bridge_ip"
+        android:nextFocusUp="@id/edittext_bridge_ip"
+        android:textAllCaps="false"
+        android:textSize="15dp" />
 
 
 </RelativeLayout>

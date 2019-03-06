@@ -15,10 +15,16 @@ import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.os.Bundle;
 import android.support.v4.content.ContextCompat;
+import android.text.Editable;
+import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ToggleButton;
@@ -79,6 +85,8 @@ public class MainActivity extends Activity implements View.OnClickListener {
     private ToggleButton mBtnSimulator;
     private Button mBtnTakeOff;
     private Button mBtnLand;
+    private Button mBtnForward;
+    private EditText mBridgeModeEditText;
 
     private TextView mTextView;
 
@@ -105,7 +113,9 @@ public class MainActivity extends Activity implements View.OnClickListener {
         IntentFilter filter = new IntentFilter();
         filter.addAction(DJISimulatorApplication.FLAG_CONNECTION_CHANGE);
         registerReceiver(mReceiver, filter);
+
     }
+
 
     /**
      * Checks if there is any missing permissions, and
@@ -156,7 +166,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
             AsyncTask.execute(new Runnable() {
                 @Override
                 public void run() {
-                    showToast( "registering, pls wait...");
+                    showToast("registering, pls wait...");
                     DJISDKManager.getInstance().registerApp(getApplicationContext(), new DJISDKManager.SDKManagerCallback() {
                         @Override
                         public void onRegister(DJIError djiError) {
@@ -164,8 +174,9 @@ public class MainActivity extends Activity implements View.OnClickListener {
                                 DJILog.e("App registration", DJISDKError.REGISTRATION_SUCCESS.getDescription());
                                 DJISDKManager.getInstance().startConnectionToProduct();
                                 showToast("Register Success");
+                                DJISDKManager.getInstance().enableBridgeModeWithBridgeAppIP("172.20.10.6");
                             } else {
-                                showToast( "Register sdk fails, check network is available");
+                                showToast("Register sdk fails, check network is available");
                             }
                             Log.v(TAG, djiError.getDescription());
                         }
@@ -176,12 +187,14 @@ public class MainActivity extends Activity implements View.OnClickListener {
                             showToast("Product Disconnected");
 
                         }
+
                         @Override
                         public void onProductConnect(BaseProduct baseProduct) {
                             Log.d(TAG, String.format("onProductConnect newProduct:%s", baseProduct));
                             showToast("Product Connected");
 
                         }
+
                         @Override
                         public void onComponentChange(BaseProduct.ComponentKey componentKey, BaseComponent oldComponent,
                                                       BaseComponent newComponent) {
@@ -225,18 +238,18 @@ public class MainActivity extends Activity implements View.OnClickListener {
     }
 
     private void updateTitleBar() {
-        if(mConnectStatusTextView == null) return;
+        if (mConnectStatusTextView == null) return;
         boolean ret = false;
         BaseProduct product = DJISimulatorApplication.getProductInstance();
         if (product != null) {
-            if(product.isConnected()) {
+            if (product.isConnected()) {
                 //The product is connected
                 mConnectStatusTextView.setText(DJISimulatorApplication.getProductInstance().getModel() + " Connected");
                 ret = true;
             } else {
-                if(product instanceof Aircraft) {
-                    Aircraft aircraft = (Aircraft)product;
-                    if(aircraft.getRemoteController() != null && aircraft.getRemoteController().isConnected()) {
+                if (product instanceof Aircraft) {
+                    Aircraft aircraft = (Aircraft) product;
+                    if (aircraft.getRemoteController() != null && aircraft.getRemoteController().isConnected()) {
                         // The product is not connected, but the remote controller is connected
                         mConnectStatusTextView.setText("only RC Connected");
                         ret = true;
@@ -245,7 +258,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
             }
         }
 
-        if(!ret) {
+        if (!ret) {
             // The product or the remote controller are not connected.
             mConnectStatusTextView.setText("Disconnected");
         }
@@ -273,7 +286,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
         super.onStop();
     }
 
-    public void onReturn(View view){
+    public void onReturn(View view) {
         Log.e(TAG, "onReturn");
         this.finish();
     }
@@ -292,14 +305,16 @@ public class MainActivity extends Activity implements View.OnClickListener {
         super.onDestroy();
     }
 
-    private void loginAccount(){
+    private void loginAccount() {
 
         UserAccountManager.getInstance().logIntoDJIUserAccount(this,
                 new CommonCallbacks.CompletionCallbackWith<UserAccountState>() {
                     @Override
                     public void onSuccess(final UserAccountState userAccountState) {
                         Log.e(TAG, "Login Success");
+                        showToast("Connecté");
                     }
+
                     @Override
                     public void onFailure(DJIError error) {
                         showToast("Login Error:"
@@ -352,15 +367,18 @@ public class MainActivity extends Activity implements View.OnClickListener {
         mBtnTakeOff = (Button) findViewById(R.id.btn_take_off);
         mBtnLand = (Button) findViewById(R.id.btn_land);
         mBtnSimulator = (ToggleButton) findViewById(R.id.btn_start_simulator);
+        mBtnForward = (Button) findViewById(R.id.btn_forward);
         mTextView = (TextView) findViewById(R.id.textview_simulator);
         mConnectStatusTextView = (TextView) findViewById(R.id.ConnectStatusTextView);
-        mScreenJoystickRight = (OnScreenJoystick)findViewById(R.id.directionJoystickRight);
-        mScreenJoystickLeft = (OnScreenJoystick)findViewById(R.id.directionJoystickLeft);
+        mScreenJoystickRight = (OnScreenJoystick) findViewById(R.id.directionJoystickRight);
+        mScreenJoystickLeft = (OnScreenJoystick) findViewById(R.id.directionJoystickLeft);
+        mBridgeModeEditText = (EditText) findViewById(R.id.edittext_bridge_ip);
 
         mBtnEnableVirtualStick.setOnClickListener(this);
         mBtnDisableVirtualStick.setOnClickListener(this);
         mBtnTakeOff.setOnClickListener(this);
         mBtnLand.setOnClickListener(this);
+        mBtnForward.setOnClickListener(this);
 
         mBtnSimulator.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
@@ -374,16 +392,15 @@ public class MainActivity extends Activity implements View.OnClickListener {
                         mFlightController.getSimulator()
                                 .start(InitializationData.createInstance(new LocationCoordinate2D(23, 113), 10, 10),
                                         new CommonCallbacks.CompletionCallback() {
-                                    @Override
-                                    public void onResult(DJIError djiError) {
-                                        if (djiError != null) {
-                                            showToast(djiError.getDescription());
-                                        }else
-                                        {
-                                            showToast("Start Simulator Success");
-                                        }
-                                    }
-                                });
+                                            @Override
+                                            public void onResult(DJIError djiError) {
+                                                if (djiError != null) {
+                                                    showToast(djiError.getDescription());
+                                                } else {
+                                                    showToast("Start Simulator Success");
+                                                }
+                                            }
+                                        });
                     }
 
                 } else {
@@ -393,23 +410,65 @@ public class MainActivity extends Activity implements View.OnClickListener {
                     if (mFlightController != null) {
                         mFlightController.getSimulator()
                                 .stop(new CommonCallbacks.CompletionCallback() {
-                                            @Override
-                                            public void onResult(DJIError djiError) {
-                                                if (djiError != null) {
-                                                    showToast(djiError.getDescription());
-                                                }else
-                                                {
-                                                    showToast("Stop Simulator Success");
-                                                }
-                                            }
-                                        }
+                                          @Override
+                                          public void onResult(DJIError djiError) {
+                                              if (djiError != null) {
+                                                  showToast(djiError.getDescription());
+                                              } else
+                                                  {
+                                                  showToast("Stop Simulator Success");
+                                              }
+                                          }
+                                      }
                                 );
                     }
                 }
             }
+
         });
 
-        mScreenJoystickRight.setJoystickListener(new OnScreenJoystickListener(){
+        mBridgeModeEditText.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_SEARCH
+                        || actionId == EditorInfo.IME_ACTION_DONE
+                        || event != null
+                        && event.getAction() == KeyEvent.ACTION_DOWN
+                        && event.getKeyCode() == KeyEvent.KEYCODE_ENTER) {
+                    if (event != null && event.isShiftPressed()) {
+                        return false;
+                    } else {
+                        // the user is done typing.
+                        handleBridgeIPTextChange();
+                    }
+                }
+                return false; // pass on to other listeners.
+            }
+        });
+        mBridgeModeEditText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (s != null && s.toString().contains("\n")) {
+                    // the user is done typing.
+                    // remove new line characcter
+                    final String currentText = mBridgeModeEditText.getText().toString();
+                    mBridgeModeEditText.setText(currentText.substring(0, currentText.indexOf('\n')));
+                    handleBridgeIPTextChange();
+                }
+            }
+        });
+
+
+       /* mScreenJoystickRight.setJoystickListener(new OnScreenJoystickListener(){
 
             @Override
             public void onTouch(OnScreenJoystick joystick, float pX, float pY) {
@@ -438,7 +497,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
         });
 
-        mScreenJoystickLeft.setJoystickListener(new OnScreenJoystickListener() {
+       mScreenJoystickLeft.setJoystickListener(new OnScreenJoystickListener() {
 
             @Override
             public void onTouch(OnScreenJoystick joystick, float pX, float pY) {
@@ -462,7 +521,17 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 }
 
             }
-        });
+        });*/
+}
+    private void handleBridgeIPTextChange() {
+        // the user is done typing.
+        final String bridgeIP = mBridgeModeEditText.getText().toString();
+        DJISDKManager.getInstance().enableBridgeModeWithBridgeAppIP(bridgeIP);
+        if (!TextUtils.isEmpty(bridgeIP)) {
+            //ToastUtils.setResultToToast("BridgeMode ON!\nIP: " + bridgeIP);
+        }
+
+
     }
 
     @Override
@@ -470,15 +539,14 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
         switch (v.getId()) {
             case R.id.btn_enable_virtual_stick:
-                if (mFlightController != null){
+                if (mFlightController != null) {
 
                     mFlightController.setVirtualStickModeEnabled(true, new CommonCallbacks.CompletionCallback() {
                         @Override
                         public void onResult(DJIError djiError) {
-                            if (djiError != null){
+                            if (djiError != null) {
                                 showToast(djiError.getDescription());
-                            }else
-                            {
+                            } else {
                                 showToast("Enable Virtual Stick Success");
                             }
                         }
@@ -489,7 +557,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
             case R.id.btn_disable_virtual_stick:
 
-                if (mFlightController != null){
+                if (mFlightController != null) {
                     mFlightController.setVirtualStickModeEnabled(false, new CommonCallbacks.CompletionCallback() {
                         @Override
                         public void onResult(DJIError djiError) {
@@ -504,7 +572,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 break;
 
             case R.id.btn_take_off:
-                if (mFlightController != null){
+                if (mFlightController != null) {
                     mFlightController.startTakeoff(
                             new CommonCallbacks.CompletionCallback() {
                                 @Override
@@ -522,7 +590,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 break;
 
             case R.id.btn_land:
-                if (mFlightController != null){
+                if (mFlightController != null) {
 
                     mFlightController.startLanding(
                             new CommonCallbacks.CompletionCallback() {
@@ -541,29 +609,42 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
                 break;
 
+            case R.id.btn_forward:
+                if (mFlightController != null) {
+                    mPitch = 3;
+                    mYaw = 0;
+                    mRoll = 0;
+                    mThrottle = 0;
+                    if (null == mSendVirtualStickDataTimer) {
+                        mSendVirtualStickDataTask = new SendVirtualStickDataTask();
+                        mSendVirtualStickDataTimer = new Timer();
+                        mSendVirtualStickDataTimer.schedule(mSendVirtualStickDataTask, 0, 200);
+                    }
+                }
+
             default:
                 break;
         }
     }
 
-    class SendVirtualStickDataTask extends TimerTask {
+class SendVirtualStickDataTask extends TimerTask {
 
-        @Override
-        public void run() {
+    @Override
+    public void run() {
 
-            if (mFlightController != null) {
-                mFlightController.sendVirtualStickFlightControlData(
-                        new FlightControlData(
-                                mPitch, mRoll, mYaw, mThrottle
-                        ), new CommonCallbacks.CompletionCallback() {
-                            @Override
-                            public void onResult(DJIError djiError) {
+        if (mFlightController != null) {
+            mFlightController.sendVirtualStickFlightControlData(
+                    new FlightControlData(
+                            mPitch, mRoll, mYaw, mThrottle
+                    ), new CommonCallbacks.CompletionCallback() {
+                        @Override
+                        public void onResult(DJIError djiError) {
 
-                            }
                         }
-                );
-            }
+                    }
+            );
         }
     }
+}
 
 }
